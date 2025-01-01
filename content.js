@@ -265,7 +265,7 @@ function addSideResults() {
             }, 200);
             SearchResults(ResultsContainer);
         } else {
-            SettingsContainer.style.height = '246.88px';
+            SettingsContainer.style.height = '444.88px';
             SettingsContainer.style.marginBottom = '20px';
             SettingsContainer.style.padding = '10px';
             SettingsContainer.style.transform = 'scaleY(1)';
