@@ -1,8 +1,68 @@
-const savedPort = localStorage.getItem('localApiPort') || '27124';
-const savedKey = localStorage.getItem('localApiKey') || '';
+const savedPort = localStorage.getItem('OmnisearchPort') || '51361';
 
 function SearchResults(parent) {
+    const query = new URLSearchParams(window.location.search).get('q');
+    const apiUrl = `http://localhost:${savedPort}/search?q=${encodeURIComponent(query)}`;
+    console.log(apiUrl);
 
+    fetch(apiUrl, {
+        headers: {
+          "Content-Type": "application/json"
+        }
+      }).then(response => response.json())
+        .then(data => {
+            parent.innerHTML = ''; // Clear previous results
+            if (data && data.length > 0) {
+                data.forEach(result => {
+                    const resultElement = document.createElement('div');
+                    resultElement.style.cssText = `
+                        padding: 10px;
+                        margin-bottom: 5px;
+                        border-radius: 5px;
+                        background-color: ${window.matchMedia('(prefers-color-scheme: dark)').matches ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)'};
+                    `;
+
+                    const titleLink = document.createElement('a');
+                    titleLink.href = `obsidian://open?vault=${encodeURIComponent(result.vault)}&file=${encodeURIComponent(result.path)}`;
+                    titleLink.style.textDecoration = 'none';
+                    titleLink.style.color = window.matchMedia('(prefers-color-scheme: dark)').matches ? '#ffffff' : '#000000';
+
+                    const titleElement = document.createElement('h3');
+                    titleElement.textContent = result.basename;
+                    titleElement.style.cssText = `
+                        font-size: 16px;
+                        font-weight: bold;
+                        margin-bottom: 5px;
+                        /* Remove default link styling */
+                        color: inherit; /* Inherit color from the link */
+                    `;
+                    titleLink.appendChild(titleElement);
+
+                    const contentElement = document.createElement('p');
+                    contentElement.style.cssText = `
+                        font-size: 14px;
+                        color: ${window.matchMedia('(prefers-color-scheme: dark)').matches ? '#ffffff' : '#000000'};
+                    `;
+                    contentElement.textContent = result.excerpt ? result.excerpt.replaceAll("<br />", " ").replaceAll("<br>", " ") : 'No content available.';
+
+                    resultElement.appendChild(titleLink);
+                    resultElement.appendChild(contentElement);
+                    parent.appendChild(resultElement);
+                });
+            } else {
+                const noResultsElement = document.createElement('p');
+                noResultsElement.textContent = 'No results found in Obsidian.';
+                noResultsElement.style.color = window.matchMedia('(prefers-color-scheme: dark)').matches ? '#ffffff' : '#000000';
+                parent.appendChild(noResultsElement);
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching data from Omnisearch:', error);
+            const errorElement = document.createElement('p');
+            errorElement.textContent = 'Error fetching search results from Obsidian.';
+            errorElement.style.color = 'red';
+            parent.appendChild(errorElement);
+        });
 }
 
 function addSideResults() {
@@ -80,9 +140,51 @@ function addSideResults() {
         margin-right: 10px;
         margin-left: 10px;
         height: fit-content;
+        max-height: 500px;
         width: ${OnSide ? 'calc(290px - 60px)' : `calc(100% - 60px)`};
         border-radius: 5px;
         background-color: ${isDarkMode ? '#49377c' : '#9173e5'};
+    `;
+    
+    function setMaxHeight() {
+        const footer = document.querySelector('#footcnt');
+        if (footer && !OnAPhone) {
+            const footerRect = footer.getBoundingClientRect();
+            const containerRect = sideResultsContainer.getBoundingClientRect();
+            const availableHeight = footerRect.top - containerRect.top - 10;
+            console.log(`Available height: ${availableHeight}px, footer top: ${footerRect.top}px, container top: ${containerRect.top}px`);
+            sideResultsContainer.style.maxHeight = `${availableHeight}px`;
+        } else {
+            console.log('No footer found / phone detected');
+            sideResultsContainer.style.maxHeight = '500px';
+        }
+    }
+    setTimeout(setMaxHeight, 1000);
+
+    const observer = new MutationObserver(mutationsList => {
+        for (let mutation of mutationsList) {
+            if (mutation.addedNodes.length) {
+                const footer = document.querySelector('#footcnt');
+                if (footer) {
+                    setMaxHeight();
+                    observer.disconnect();
+                    return;
+                }
+            }
+        }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    const ResultsContainer = document.createElement('div');
+    ResultsContainer.id = 'results';
+    ResultsContainer.style.cssText = `
+        display: flex;
+        flex-direction: column;
+        height: fit-content;
+        max-height: 100%;
+        width: 100%;
+        border-radius: 5px;
+        overflow-y: auto;
     `;
 
     // Setup the settings
@@ -143,12 +245,10 @@ function addSideResults() {
         return container;
     }
 
-    const portField = createInputField('Local REST API Port', 'number', savedPort, 'localApiPort');
-    const keyField = createInputField('Local REST API Key', 'password', savedKey, 'localApiKey');
+    const portField = createInputField('Omnisearch HTTP Server Port', 'number', savedPort, 'OmnisearchPort');
 
     SettingsContainer.appendChild(SettingsTitle);
     SettingsContainer.appendChild(portField);
-    SettingsContainer.appendChild(keyField);
 
     function ToggleSettings() {
         if (SettingsAnimationRunning) return;
@@ -163,8 +263,9 @@ function addSideResults() {
                 SettingsAnimationRunning = false;
                 SettingsOpen = false;
             }, 200);
+            SearchResults(ResultsContainer);
         } else {
-            SettingsContainer.style.height = '213.08px';
+            SettingsContainer.style.height = '246.88px';
             SettingsContainer.style.marginBottom = '20px';
             SettingsContainer.style.padding = '10px';
             SettingsContainer.style.transform = 'scaleY(1)';
@@ -175,7 +276,6 @@ function addSideResults() {
                 SettingsAnimationRunning = false;
                 SettingsOpen = true;
             }, 200);
-            SearchResults(sideResultsContainer);
         }
     }
     sideResultsContainer.appendChild(SettingsContainer);
@@ -221,6 +321,7 @@ function addSideResults() {
         let isHovering = false;
         let ClickAnimationRunning = false;
 
+
         TitleButton.onmouseover = function () {
             isHovering = true;
             if (ClickAnimationRunning) return;
@@ -253,7 +354,9 @@ function addSideResults() {
         parent.insertBefore(TitleBar, parent.firstChild);
     }
     CreateTitle(sideResultsContainer);
-    SearchResults(sideResultsContainer);
+
+    sideResultsContainer.appendChild(ResultsContainer);
+    SearchResults(ResultsContainer);
 
     // insert new container
     if (OnAPhone) {
